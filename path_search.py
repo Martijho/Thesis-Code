@@ -3,6 +3,7 @@ from reprint import output
 import numpy as np
 import random
 import time
+from __future__ import print_function
 
 class PathSearch:
     def __init__(self, pathnet):
