@@ -2,7 +2,6 @@ from pathnet_keras import PathNet
 from path_search import PathSearch, TS_box
 from dataprep import DataPrep
 from plot_pathnet import PathNetPlotter
-from analytic import Analytic
 
 
 training_size = 60000
@@ -95,9 +94,9 @@ while True:
     print('Test accuracy: ', pn.evaluate_path(x_test6, y_test6, path6, task=task6))
 
 
-    print('Overlap MNIST -> cSVHN same classes[A->A]:', Analytic.path_overlap(path1, path4))
-    print('Overlap MNIST -> cSVHN same classes[B->B]:', Analytic.path_overlap(path2, path5))
-    print('Overlap MNIST -> cSVHN same classes[C->C]:', Analytic.path_overlap(path3, path6))
+    #print('Overlap MNIST -> cSVHN same classes[A->A]:', Analytic.path_overlap(path1, path4))
+    #print('Overlap MNIST -> cSVHN same classes[B->B]:', Analytic.path_overlap(path2, path5))
+    #print('Overlap MNIST -> cSVHN same classes[C->C]:', Analytic.path_overlap(path3, path6))
 
     pn_plotter = PathNetPlotter(pn)
     pn_plotter.plot_paths([path1, path2, path3, path4, path5, path6], filename='../logs/test_pdf')

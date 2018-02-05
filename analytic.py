@@ -87,7 +87,7 @@ class Analytic:
                 else:
                     print(str(self.pathnet.training_counter[j][i]).ljust(5), end='')
             print()
-        print('='*56, end ='\n\n')
+        print('='*56, '\n')
 
     def parameters_along_path(self, path):
         model = self.pathnet.path2model(path)
