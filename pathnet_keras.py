@@ -165,7 +165,7 @@ class PathNet:
         task = TaskContainer(input_shape, output_size, flatten_in_unique, name='unique_1',
                              optimizer=optimizer_type, loss=loss, lr=learning_rate)
 
-        pathnet = PathNet(input_shape=input_shape, width=width, depth=depth, max_models_before_reset=20)
+        pathnet = PathNet(input_shape=input_shape, width=width, depth=depth, max_models_before_reset=80)
         pathnet._layers = layers
         pathnet._tasks = [task]
         pathnet.max_modules_pr_layer = max_modules_pr_layer

@@ -355,13 +355,15 @@ class TS_box:
 
     @staticmethod
     def replace_2to2(competing, indecies, population, mutation_probability=0.1, width=10):
-        while len(competing) > 0:
+        comp = list(competing)
+        ind = list(indecies)
+        while len(comp) > 0:
 
-            winner_p = competing.pop(0)
-            looser_i = indecies.pop(-1)
+            winner_p = comp.pop(0)
+            looser_i = ind.pop(-1)
 
-            indecies.pop(0)
-            competing.pop(-1)
+            ind.pop(0)
+            comp.pop(-1)
 
             child = [winner_p]
             GA_box.mutate(child, mutation_probability=mutation_probability, width=width)
@@ -369,15 +371,17 @@ class TS_box:
         return population
     @staticmethod
     def replace_3to2(competing, indecies, population, mutation_probability=0.1, width=10):
-        while len(competing) > 0:
+        comp = list(competing)
+        ind = list(indecies)
+        while len(comp) > 0:
 
-            mom_p = competing.pop(0)
-            dad_p = competing.pop(0)
-            looser_i = indecies.pop(-1)
+            mom_p = comp.pop(0)
+            dad_p = comp.pop(0)
+            looser_i = ind.pop(-1)
 
-            indecies.pop(0)
-            indecies.pop(0)
-            competing.pop(-1)
+            ind.pop(0)
+            ind.pop(0)
+            comp.pop(-1)
 
             child = GA_box.recombination([mom_p, dad_p])
             GA_box.mutate(child, mutation_probability=mutation_probability, width=width)

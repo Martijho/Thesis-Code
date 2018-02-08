@@ -71,7 +71,10 @@ class SearchExperiment:
             training.append(training_counter)
             paths.append(p)
             fitness.append(f)
-            evaluated.append(self.pn.evaluate_path(x_t, y_t, p, task=task))
+
+            model = self.pn.path2model(p, task)
+            evaluated.append(model.evaluate(x_t, y_t, batch_size=16, verbose=False)[1])
+
             generations.append(len(log['path']))
 
         return {'paths': paths,
@@ -259,12 +262,12 @@ if __name__ == "__main__":
     while True:
         print('\n\n\n')
         print('EXPERIMENTAL RUN', i, '- High to low')
-        param, data = experiment_high_to_low()
-        run_experiment(log_h2l, data, param)
+        #param, data = experiment_high_to_low()
+        #run_experiment(log_h2l, data, param)
 
         print('EXPERIMENTAL RUN', i, '- Low to high')
-        param, data = experiment_low_to_high()
-        run_experiment(log_l2h, data, param)
+        #param, data = experiment_low_to_high()
+        #run_experiment(log_l2h, data, param)
 
         print('EXPERIMENTAL RUN', i, '- Low only')
         param, data = experiment_low_only()
