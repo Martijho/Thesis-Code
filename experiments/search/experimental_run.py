@@ -110,7 +110,7 @@ def get_data_list():
 def get_param_list(selection_pressure=3, replace_func=TS_box.replace_3to2):
     param1 = {'name': 'Task 1: MNIST [0, 1, 2, 3, 4]',
               'threshold_acc': 1.1,
-              'generation_limit': 2, #200,
+              'generation_limit': 100,
               'population_size': 64,
               'selection_pressure': selection_pressure,
               'replace_func': replace_func,
@@ -261,29 +261,29 @@ if __name__ == "__main__":
     i = 1
     while True:
         print('\n\n\n')
-        print('EXPERIMENTAL RUN', i, '- High to low')
-        #param, data = experiment_high_to_low()
-        #run_experiment(log_h2l, data, param)
+        print('                             EXPERIMENTAL RUN', i, '- High to low')
+        param, data = experiment_high_to_low()
+        run_experiment(log_h2l, data, param)
 
-        print('EXPERIMENTAL RUN', i, '- Low to high')
-        #param, data = experiment_low_to_high()
-        #run_experiment(log_l2h, data, param)
+        print('                             EXPERIMENTAL RUN', i, '- Low to high')
+        param, data = experiment_low_to_high()
+        run_experiment(log_l2h, data, param)
 
-        print('EXPERIMENTAL RUN', i, '- Low only')
+        print('                             EXPERIMENTAL RUN', i, '- Low only')
         param, data = experiment_low_only()
         run_experiment(log_l, data, param)
 
-        print('EXPERIMENTAL RUN', i, '- High only')
+        print('                             EXPERIMENTAL RUN', i, '- High only')
         param, data = experiment_high_only()
         run_experiment(log_h, data, param)
 
-        print('EXPERIMENTAL RUN', i, '- Low only (Flipped)')
-        param, data = experiment_low_only_flipped()
-        run_experiment(log_lf, data, param)
+        #print('EXPERIMENTAL RUN', i, '- Low only (Flipped)')
+        #param, data = experiment_low_only_flipped()
+        #run_experiment(log_lf, data, param)
 
-        print('EXPERIMENTAL RUN', i, '- High only (Flipped)')
-        param, data = experiment_high_only_flipped()
-        run_experiment(log_hf, data, param)
+        #print('EXPERIMENTAL RUN', i, '- High only (Flipped)')
+        #param, data = experiment_high_only_flipped()
+        #run_experiment(log_hf, data, param)
 
         i+=1
 
