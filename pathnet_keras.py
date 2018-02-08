@@ -148,7 +148,7 @@ class PathNet:
         output_size             = output_size
         depth                   = 3
         width                   = 20
-        max_modules_pr_layer    = 4
+        max_modules_pr_layer    = 3
         min_modules_pr_layer    = 1
         learning_rate           = 0.0001
         optimizer_type          = Adam

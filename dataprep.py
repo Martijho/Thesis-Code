@@ -133,7 +133,7 @@ class DataPrep:
         self.input_shape = [32, 32, 3]
         self.output_size = 10
 
-        data_dict = io.loadmat('../datasets/cSVHN/extra_32x32.mat')
+        data_dict = io.loadmat('../../../datasets/cSVHN/extra_32x32.mat')
         data_dict['X'] = np.moveaxis(data_dict['X'], -1, 0)
         data_dict['y'][data_dict['y'] == 10] = 0
         data_dict['y'] = to_categorical(data_dict['y'], 10)

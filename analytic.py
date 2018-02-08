@@ -32,6 +32,7 @@ class Analytic:
             modules_training_log.append(l)
         return modules_training_log, total/number_of_modules_in_path
 
+    '''
     def show_optimal_paths(self):
         for i, t in enumerate(self.pathnet._tasks):
             p = t.optimal_path
@@ -56,13 +57,14 @@ class Analytic:
             print(modules_training_log)
             print('Average epochs trained on each module:', total/number_of_modules_in_path)
             print('\n')
-
+    '''
     def _is_module_trainable(self, layer, module):
         return self.pathnet._layers[layer].is_module_trainable(module)
 
     def _module_size(self, layer, module):
         return len(self.pathnet._layers[layer]._modules[module])
 
+    '''
     def show_locked_modules(self):
         pn = self.pathnet
         print('='*20, 'Locked Modules', '='*20)
@@ -88,7 +90,7 @@ class Analytic:
                     print(str(self.pathnet.training_counter[j][i]).ljust(5), end='')
             print()
         print('='*56, '\n')
-
+    '''
     def parameters_along_path(self, path):
         model = self.pathnet.path2model(path)
         return model.count_params()

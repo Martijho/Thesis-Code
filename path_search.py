@@ -1,9 +1,10 @@
+from __future__ import print_function
 from analytic import Analytic
 from reprint import output
 import numpy as np
 import random
 import time
-from __future__ import print_function
+
 
 class PathSearch:
     def __init__(self, pathnet):
@@ -196,7 +197,7 @@ class PathSearch:
         population_size     = 16   if 'population_size'     not in hyperparam else hyperparam['population_size']
         generation_limit    = 500  if 'generation_limit'    not in hyperparam else hyperparam['generation_limit']
         threshold_acc       = 0.95 if 'threshold_acc'       not in hyperparam else hyperparam['threshold_acc']
-        selection_preassure = 2    if 'selection_preassure' not in hyperparam else hyperparam['selection_preassure']
+        selection_pressure  = 2    if 'selection_pressure'  not in hyperparam else hyperparam['selection_pressure']
         replace_func        = TS_box.replace_2to2 if 'replace_func' not in hyperparam else hyperparam['replace_func']
         mutation_prob       = 1/(self.pathnet.max_modules_pr_layer * self.pathnet.depth)
         if replace_func is None: replace_func = TS_box.replace_2to2
@@ -209,7 +210,7 @@ class PathSearch:
             print('\t\tpopulation_size:     ', population_size)
             print('\t\tgeneration_limit:    ', generation_limit)
             print('\t\tthreshold_acc:       ', threshold_acc)
-            print('\t\tselection_preassure: ', selection_preassure)
+            print('\t\tselection_pressure: ', selection_pressure)
             print('\t\treplace_func:        ', replace_func)
             print('\t\tmutation_prob:       ', mutation_prob, '\n\n')
 
@@ -239,19 +240,20 @@ class PathSearch:
                 output_lines[0] = output_lines[0] = '='*15+' Generation '+str(generation)+' ' + '='*15 + '\t' + str(t_stop-t_start)
                 t_start = time.time()
 
-                competing, indecies = TS_box.selection(population, selection_preassure)
-                if verbose:
-                    fitness = TS_box.evaluate(self.pathnet, competing, indecies, x, y, task,
-                                              training_iterations=training_iterations, batch_size=batch_size,
-                                              output_lines=output_lines)
-                else:
-                    fitness = TS_box.evaluate(self.pathnet, competing, indecies, x, y, task,
-                                              training_iterations=training_iterations, batch_size=batch_size)
+                competing, indecies = TS_box.selection(population, selection_pressure)
+                out_channel = output_lines if verbose else None
+
+                training_fitness = TS_box.train(self.pathnet, competing, indecies, x, y,
+                                                task, training_iterations=50, batch_size=16, output_lines=out_channel)
+
+                if selection_pressure >= 5:
+                    fitness = TS_box.evaluate(self.pathnet, competing, indecies, x, y,
+                                              task, evaluation_size=800, output_lines=out_channel)
+                else: fitness = training_fitness
+
 
                 competing, fitness, indecies = TS_box.sort_by_fitness(competing, fitness, indecies=indecies)
 
-
-                for path in competing: self.pathnet.increment_training_counter(path)
 
                 log['path'].append(competing)
                 log['fitness'].append(fitness)
@@ -260,19 +262,18 @@ class PathSearch:
                     _, avg_training = Analytic.training_along_path(path, self.pathnet.training_counter)
                     log['avg_training'][-1].append(avg_training)
 
+                population = replace_func(competing, indecies, population, mutation_probability=mutation_prob,
+                                          width=self.pathnet.width)
+
                 if replace_func == TS_box.replace_2to2:         subsection = int(len(indecies)/2)
                 if replace_func == TS_box.replace_3to2:         subsection = 2*int(len(indecies)/3)
                 if replace_func == TS_box.winner_replace_all:   subsection = 1
                 if verbose:
                     for i, pop, fit in zip(indecies[subsection:], competing[subsection:], fitness[subsection:]):
-                        output_lines[i+1] = str(pop).ljust(54) + ('[%.1f' % (fit*100)) + ' %]'
+                        output_lines[i+1] = str(population[i]).ljust(54) + ('[%.1f' % (fit*100)) + ' %]'
 
 
                 if fitness[0] >= threshold_acc or generation == generation_limit: break
-
-                replace_func(competing, indecies, population, mutation_probability=mutation_prob, width=self.pathnet.width)
-
-
 
                 t_stop = time.time()
 
@@ -286,6 +287,37 @@ class TS_box:
         paths = np.array(population)[ind]
         return paths.tolist(), ind
 
+    @staticmethod
+    def train(pathnet, selection, indecies, x, y, task, training_iterations=50, batch_size=16, output_lines=None):
+        training_fitness = []
+
+        for i, genome in zip(indecies, selection):
+            model = pathnet.path2model(genome, task)
+
+            batch = np.random.randint(0, len(x), batch_size*training_iterations)
+            local_fitness = model.fit(x[batch], y[batch], batch_size=16, epochs=1,
+                                      verbose=0, validation_split=0.0).history['acc'][0]
+
+            pathnet.increment_training_counter(genome)
+            training_fitness.append(local_fitness)
+
+            if output_lines is not None:
+                output_lines[i + 1] = str(genome).ljust(54) + ('<%.1f' % (local_fitness * 100)) + ' %>'
+
+        return training_fitness
+
+    @staticmethod
+    def evaluate(pathnet, selection, indecies, x, y, task, evaluation_size=800, output_lines=None):
+        fitness = []
+        for i, genome in zip(indecies, selection):
+            model = pathnet.path2model(genome, task)
+            batch = np.random.randint(0, len(x), evaluation_size)
+            fit = model.evaluate(x[batch], y[batch], batch_size=16, verbose=False)[1]
+            fitness.append(fit)
+            output_lines[i+1] = output_lines[i+1][:54] + (' %.1f' % (fit * 100)) + ' %'
+
+        return fitness
+    '''
     @staticmethod
     def evaluate(pathnet, selection, indecies, x, y, task, training_iterations=50, batch_size=16, output_lines=None):
         pathnet.reset_backend_session()
@@ -311,7 +343,7 @@ class TS_box:
                 output_lines[i+1] = str(genome).ljust(55) + ('%.1f' % (local_fitness * 100)) + ' %'
 
         return fitness
-
+    '''
     @staticmethod
     def sort_by_fitness(selection, fitness, indecies=None):
         if indecies is None:
@@ -333,7 +365,7 @@ class TS_box:
             child = [winner_p]
             GA_box.mutate(child, mutation_probability=mutation_probability, width=width)
             population[looser_i] = child[0]
-
+        return population
     @staticmethod
     def replace_3to2(competing, indecies, population, mutation_probability=0.1, width=10):
         while len(competing) > 0:
@@ -349,14 +381,14 @@ class TS_box:
             child = GA_box.recombination([mom_p, dad_p])
             GA_box.mutate(child, mutation_probability=mutation_probability, width=width)
             population[looser_i] = child[0]
-
+        return population
     @staticmethod
     def winner_replace_all(competing, indecies, population, mutation_probability=0.1, width=10):
         for looser_ind in indecies[1:]:
             child = [competing[0]]
             GA_box.mutate(child, mutation_probability=mutation_probability, width=width)
             population[looser_ind] = child[0]
-
+        return population
     @staticmethod
     def recombination(mom, dad):
         child = []
@@ -373,7 +405,7 @@ class TS_box:
 class GA_box:
 
     @staticmethod
-    def evaluate_population(pathnet, population, x, y, task, training_iterations=55, batch_size=16,
+    def evaluate_population(pathnet, population, x, y, task, training_iterations=50, batch_size=16,
                             output_lines=None):
         pathnet.reset_backend_session()
         fitness = []
