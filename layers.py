@@ -5,6 +5,7 @@ from keras.optimizers import Adagrad, Adam, RMSprop, SGD
 import numpy as np
 import os
 import copy
+import sys
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 class Layer:
@@ -75,7 +76,10 @@ class Layer:
 
 class ConvLayer(Layer):
     def __init__(self, width, name_prefix, config, maxpool=False):
-        super().__init__(width, name_prefix, config)
+        if sys.version_info[0] < 3:
+            super(ConvLayer).__init__(width, name_prefix, config)
+        else:
+            super().__init__(width, name_prefix, config)
 
         self._maxpool = maxpool
 
@@ -159,7 +163,10 @@ class ConvLayer(Layer):
 
 class DenseLayer(Layer):
     def __init__(self, width, name_prefix, config, flatten=False):
-        super().__init__(width, name_prefix, config)
+        if sys.version_info[0] < 3:
+            super(DenseLayer).__init__(width, name_prefix, config)
+        else:
+            super().__init__(width, name_prefix, config)
         self._flatten_first = flatten
 
         self._init_layer()
