@@ -77,7 +77,7 @@ class Layer:
 class ConvLayer(Layer):
     def __init__(self, width, name_prefix, config, maxpool=False):
         if sys.version_info[0] < 3:
-            super(ConvLayer).__init__(width, name_prefix, config)
+            super(self.__class__, self).__init__(width, name_prefix, config)
         else:
             super().__init__(width, name_prefix, config)
 
@@ -164,7 +164,7 @@ class ConvLayer(Layer):
 class DenseLayer(Layer):
     def __init__(self, width, name_prefix, config, flatten=False):
         if sys.version_info[0] < 3:
-            super(DenseLayer).__init__(width, name_prefix, config)
+            super(self.__class__, self).__init__(width, name_prefix, config)
         else:
             super().__init__(width, name_prefix, config)
         self._flatten_first = flatten
