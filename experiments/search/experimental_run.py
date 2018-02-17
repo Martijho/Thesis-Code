@@ -13,6 +13,7 @@ import copy
 import threading
 from keras import backend as K
 import tensorflow as tf
+import sys
 
 class SearchExperiment:
     def __init__(self, data_list, hyperparameter_list, verbose=True):
@@ -292,19 +293,34 @@ log_names = [log_h2l, log_l2h, log_recomb, log_l, log_h]
 exp_functions = [experiment_high_to_low, experiment_low_to_high, experiment_recomb, experiment_low_only, experiment_high_only]
 
 if __name__ == "__main__":
+    log_name = 'BUG'
+    exp_func = None
+    if sys.argv[0] == 'high':
+        log_name = log_h
+        exp_func = experiment_high_only
+    if sys.argv[0] == 'low':
+        log_name = log_l
+        exp_func = experiment_low_only
+    if sys.argv[0] == 'high2low':
+        log_name = log_h2l
+        exp_func = experiment_high_to_low
+    if sys.argv[0] == 'low2high':
+        log_name = log_l2h
+        exp_func = experiment_low_to_high
+    if sys.argv[0] == 'recomb':
+        log_name = log_recomb
+        exp_func = experiment_recomb
 
     i = 1
     while True:
-        for log, func in zip(log_names, exp_functions):
-            print('\n\n\n')
-            THREAD_RUNNING = True
+        print('\n\n\n')
+        THREAD_RUNNING = True
 
-            print('\t\t\t\tEXPERIMENTAL RUN', i, '-', log)
-            param, data = func()
-            thread = ExperimentationThread(log, data, param)
-            thread.start()
-            thread.join()
+        print('\t\t\t\tEXPERIMENTAL RUN', i, '-', log_name)
+        param, data = exp_func()
+        thread = ExperimentationThread(log_name, data, param)
+        thread.start()
+        thread.join()
 
-        i+=1
 
 

@@ -201,7 +201,7 @@ class PathSearch:
         threshold_acc       = 0.95 if 'threshold_acc'       not in hyperparam else hyperparam['threshold_acc']
         selection_pressure  = 2    if 'selection_pressure'  not in hyperparam else hyperparam['selection_pressure']
         replace_func        = TS_box.replace_2to2 if 'replace_func' not in hyperparam else hyperparam['replace_func']
-        mutation_prob       = 1/(self.pathnet.max_modules_pr_layer * self.pathnet.depth)
+        mutation_prob       = 1.0/(self.pathnet.max_modules_pr_layer * self.pathnet.depth)
         if replace_func is None: replace_func = TS_box.replace_2to2
 
         if verbose:
