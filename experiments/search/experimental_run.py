@@ -7,10 +7,12 @@ from analytic import Analytic
 from dataprep import DataPrep
 from plot_pathnet import PathNetPlotter
 import pickle as pkl
-import time as clock
+import time
 import numpy as np
 import copy
-
+import threading
+from keras import backend as K
+import tensorflow as tf
 
 class SearchExperiment:
     def __init__(self, data_list, hyperparameter_list, verbose=True):
@@ -60,6 +62,7 @@ class SearchExperiment:
         evaluated   = []
         training    = []
         generations = []
+        logs        = []
 
         for task, (x, y, x_t, y_t), param in zip(self.tasks, self.data, self.hyperparameter_list):
 
@@ -71,6 +74,7 @@ class SearchExperiment:
             training.append(training_counter)
             paths.append(p)
             fitness.append(f)
+            logs.append(log)
 
             model = self.pn.path2model(p, task)
             evaluated.append(model.evaluate(x_t, y_t, batch_size=16, verbose=False)[1])
@@ -81,7 +85,8 @@ class SearchExperiment:
                 'fitness': fitness,
                 'evaluated': evaluated,
                 'training': training,
-                'generations': generations}
+                'generations': generations,
+                'logs': logs}
 
 
 def get_data_list():
@@ -89,20 +94,28 @@ def get_data_list():
     data.mnist()
     data.add_padding()
     data.grayscale2rgb()
-    data.x, data.y, data.x_test, data.y_test = data.x[:8000], data.y[:8000], data.x_test[:2000], data.y_test[:2000]
+    data.x, data.y, data.x_test, data.y_test = data.x[:10000], data.y[:10000], data.x_test[:4000], data.y_test[:4000]
 
     x1, y1, x_t1, y_t1 = data.sample_dataset([0, 1, 2, 3, 4])
     x2, y2, x_t2, y_t2 = data.sample_dataset([5, 6, 7, 8, 9])
     x3, y3, x_t3, y_t3 = data.sample_dataset([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 
+
     data = DataPrep()
     data.cSVHN_ez()
-    data.x, data.y, data.x_test, data.y_test = data.x[:8000], data.y[:8000], data.x_test[:2000], data.y_test[:2000]
+    data.x, data.y, data.x_test, data.y_test = data.x[:10000], data.y[:10000], data.x_test[:4000], data.y_test[:4000]
 
 
     x4, y4, x_t4, y_t4 = data.sample_dataset([0, 1, 2, 3, 4])
     x5, y5, x_t5, y_t5 = data.sample_dataset([5, 6, 7, 8, 9])
     x6, y6, x_t6, y_t6 = data.sample_dataset([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+
+    print('Task1', x1.shape, x_t1.shape)
+    print('Task2', x2.shape, x_t2.shape)
+    print('Task3', x3.shape, x_t3.shape)
+    print('Task4', x4.shape, x_t4.shape)
+    print('Task5', x5.shape, x_t5.shape)
+    print('Task6', x6.shape, x_t6.shape)
 
     return [(x1, y1, x_t1, y_t1), (x2, y2, x_t2, y_t2),
             (x3, y3, x_t3, y_t3), (x4, y4, x_t4, y_t4),
@@ -148,8 +161,12 @@ def experiment_high_to_low():
     for i in range(len(dicts)): dicts[i]['selection_pressure'] = tournament_sizes[i]
 
     return dicts, data
-def experiment_low_only():
+def experiment_recomb():
     dicts = get_param_list(selection_pressure=3, replace_func=TS_box.replace_3to2)
+    data  = get_data_list()
+    return dicts, data
+def experiment_low_only():
+    dicts = get_param_list(selection_pressure=2, replace_func=TS_box.winner_replace_all)
     data  = get_data_list()
     return dicts, data
 def experiment_low_only_flipped():
@@ -195,7 +212,8 @@ def run_experiment(filename, data, parameters):
                'fit1':   [], 'fit2':   [], 'fit3':   [], 'fit4':   [], 'fit5':   [], 'fit6':   [],
                'eval1':  [], 'eval2':  [], 'eval3':  [], 'eval4':  [], 'eval5':  [], 'eval6':  [],
                'train1': [], 'train2': [], 'train3': [], 'train4': [], 'train5': [], 'train6': [],
-               'gen1':   [], 'gen2':   [], 'gen3':   [], 'gen4':   [], 'gen5':   [], 'gen6':   []}
+               'gen1':   [], 'gen2':   [], 'gen3':   [], 'gen4':   [], 'gen5':   [], 'gen6':   [],
+               'log1':   [], 'log2':   [], 'log3':   [], 'log4':   [], 'log5':   [], 'log6':   []}
 
     experiment = SearchExperiment(data, parameters)
     l = experiment.run()
@@ -205,6 +223,7 @@ def run_experiment(filename, data, parameters):
     for j in range(len(parameters)): log['eval' + str(j + 1)].append(l['evaluated'][j])
     for j in range(len(parameters)): log['train' + str(j + 1)].append(l['training'][j])
     for j in range(len(parameters)): log['gen' + str(j + 1)].append(l['generations'][j])
+    for j in range(len(parameters)): log['log' + str(j + 1)].append(l['logs'][j])
 
     #pn_plotter = PathNetPlotter(experiment.pn)
     #pn_plotter.plot_paths(l['paths'], filename='iter'+str(i))
@@ -249,41 +268,42 @@ def thread_task(thread_nr, data, param, experiments):
     with open('../../logs/search/thread_log_'+str(thread_nr)+'.pkl', 'wb') as f:
         pkl.dump(log, f)
 
+
+class ExperimentationThread(threading.Thread):
+    def __init__(self, name, data, param):
+        threading.Thread.__init__(self)
+        self.name = name
+        self.data = data
+        self.param = param
+
+    def run(self):
+        K.set_session(tf.Session(config=tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=4))))
+        run_experiment(self.name, self.data, self.param)
+
 log_h2l = 'log_h2l'
 log_l2h = 'log_l2h'
 log_l   = 'log_l'
 log_h   = 'log_h'
 log_lf  = 'log_lf'
 log_hf  = 'log_hf'
+log_recomb = 'log_recomb'
+
+log_names = [log_h2l, log_l2h, log_recomb, log_l, log_h]
+exp_functions = [experiment_high_to_low, experiment_low_to_high, experiment_recomb, experiment_low_only, experiment_high_only]
 
 if __name__ == "__main__":
 
     i = 1
     while True:
-        print('\n\n\n')
-        print('                             EXPERIMENTAL RUN', i, '- High to low')
-        param, data = experiment_high_to_low()
-        run_experiment(log_h2l, data, param)
+        for log, func in zip(log_names, exp_functions):
+            print('\n\n\n')
+            THREAD_RUNNING = True
 
-        print('                             EXPERIMENTAL RUN', i, '- Low to high')
-        param, data = experiment_low_to_high()
-        run_experiment(log_l2h, data, param)
-
-        print('                             EXPERIMENTAL RUN', i, '- Low only')
-        param, data = experiment_low_only()
-        run_experiment(log_l, data, param)
-
-        print('                             EXPERIMENTAL RUN', i, '- High only')
-        param, data = experiment_high_only()
-        run_experiment(log_h, data, param)
-
-        #print('EXPERIMENTAL RUN', i, '- Low only (Flipped)')
-        #param, data = experiment_low_only_flipped()
-        #run_experiment(log_lf, data, param)
-
-        #print('EXPERIMENTAL RUN', i, '- High only (Flipped)')
-        #param, data = experiment_high_only_flipped()
-        #run_experiment(log_hf, data, param)
+            print('\t\t\t\tEXPERIMENTAL RUN', i, '-', log)
+            param, data = func()
+            thread = ExperimentationThread(log, data, param)
+            thread.start()
+            thread.join()
 
         i+=1
 

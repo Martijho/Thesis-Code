@@ -161,5 +161,48 @@ class Analytic:
 
         return reuse
 
+    @staticmethod
+    def encode_path(path, L):
+        encoded = []
+        for l in path:
+            layer = np.zeros(L)
+            layer[l] = 1
+            encoded.append(layer)
+        return encoded
+
+
+    @staticmethod
+    def population_diversity(population, L):
+        encoded_population = []
+        for path in population: encoded_population.append(Analytic.encode_path(path, L))
+
+        average_encoded = []
+
+        for i in range(len(encoded_population[0])):
+            running_total = np.zeros(L)
+            for path in encoded_population:
+                running_total+=path[i]
+            running_total = running_total / len(population)
+            average_encoded.append(running_total)
+
+        avg_dist = []
+
+        for i in range(len(average_encoded)):
+            dist = 0
+            for ind in encoded_population:
+                dist += sum(np.absolute(ind[i] - average_encoded[i]))
+            dist /= len(population)
+            avg_dist.append(dist)
+
+        return avg_dist
+
+
 if __name__ == "__main__":
     print('why run this file?')
+
+    pop = [[[1]]]
+
+    for i in pop:
+        print(i)
+
+    Analytic.population_diversity(pop, 4)

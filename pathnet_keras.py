@@ -3,6 +3,7 @@ from keras.layers import Dense, Input, Conv2D, MaxPooling2D, Flatten, BatchNorma
 from keras.optimizers import Adagrad, Adam, RMSprop, SGD
 from keras.callbacks import TensorBoard
 from keras import backend as K
+import tensorflow as tf
 from datetime import datetime
 from layers import Layer, DenseLayer, ConvLayer, TaskContainer
 import numpy as np
@@ -16,6 +17,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 class PathNet:
     def __init__(self, input_shape=None, width=-1, depth=-1, max_models_before_reset=30):
+        K.set_session(tf.Session(config=tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=4))))
         self._models_created_in_current_session = 0
         self._max_active_modules = max_models_before_reset
 

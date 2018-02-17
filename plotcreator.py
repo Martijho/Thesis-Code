@@ -3,12 +3,11 @@ sys.path.append('../')
 from datetime import datetime as dt
 from matplotlib import pyplot as plt
 import matplotlib.patches as mpatches
-import pickle as pkl
-import os
-import time as clock
+from analytic import Analytic
 import numpy as np
 import random
 
+# First path experiments + Flipped Search+Search
 class Exp1_plotter:
     def __init__(self, log, width, depth):
         self.log = log
@@ -36,6 +35,9 @@ class Exp1_plotter:
                 print('  >', k[4:])
 
     def training_boxplot(self, save_file=None, lock=True, flipped=None):
+        if flipped is not None:
+            self.max_reuse = max([self.max_reuse] + flipped['module_reuse'])
+
         def draw_plot(data, offset, edge_color, fill_color):
             pos = np.arange(self.max_reuse+1)+offset
             bp = ax.boxplot(data, positions=pos, widths=0.2, patch_artist=True, manage_xticks=False)
@@ -74,16 +76,20 @@ class Exp1_plotter:
         handles = [ss_patch, ps_patch]
 
         for i in range(len(ssbox)):
-            ssbox[i] = sum(ssbox[i]) / len(ssbox[i])
-            psbox[i] = sum(psbox[i]) / len(psbox[i])
-
+            if len(ssbox[i]) != 0: ssbox[i] = sum(ssbox[i]) / len(ssbox[i])
+            #else:                  ssbox[i] = 0
+            if len(psbox[i]) != 0: psbox[i] = sum(psbox[i]) / len(psbox[i])
+            #else:                  psbox[i] = 0
+        ssbox.pop(-1)
+        psbox.pop(-1)
         plt.plot(ssbox, color=self.ss_color)
         plt.plot(psbox, color=self.ps_color)
 
         if flipped is not None:
             handles.append(mpatches.Patch(color='red', label='Search + Search flipped'))
             for i in range(len(fssbox)):
-                fssbox[i] = sum(fssbox[i]) / len(fssbox[i])
+                if len(fssbox[i]) != 0: fssbox[i] = sum(fssbox[i]) / len(fssbox[i])
+                else:                   fssbox[i] = 0
             plt.plot(fssbox, color='red')
 
         plt.legend(handles=handles)
@@ -303,3 +309,107 @@ class Exp1_plotter:
             plt.savefig(save_file+ '.png')
         plt.show(block=lock)
     '''
+
+# Search experiments
+class Exp2_plotter:
+    def __init__(self, logs, number_of_tasks=6):
+        self.logs = logs
+        self.number_of_tasks = number_of_tasks
+        self.colors = ['#dd2020', '#e8bd00', '#7b6500', '#0fcf71', '#409edb', '#e55d82']
+
+    @staticmethod
+    def average_reuse(log, number_of_tasks=6):
+        number_of_experiments = len(log['path1'])
+
+        running_total = None
+
+        for experiment in range(number_of_experiments):
+            paths = []
+            for task in range(1, number_of_tasks+1):
+                paths.append(log['path'+str(task)][experiment])
+
+            reuse = Exp2_plotter.reuse_table(paths)
+
+            if running_total is None: running_total = reuse
+            else:
+                for i in range(len(running_total)):
+                    tmp = np.array(reuse[i]) + np.array(running_total[i])
+                    running_total[i] = tmp
+
+        for i in range(len(running_total)):
+            running_total[i] = (running_total[i]/number_of_experiments).tolist()
+
+        return running_total, sum([j for i in running_total for j in i])
+
+    @staticmethod
+    def reuse_table(paths):
+        reuse = np.chararray([len(paths), len(paths)])
+        reuse[:] = '.'
+        reuse = []
+        for i in range(len(paths)):
+            row = []
+            for j in range(i+1, len(paths)):
+                #reuse[i][j] = Analytic.path_overlap(paths[i], paths[j])
+                row.append(Analytic.path_overlap(paths[i], paths[j]))
+            reuse.append(row)
+        return reuse
+
+    @staticmethod
+    def usefull_training_pr_task(log, number_of_tasks=6):
+        used_training_ratio = {}
+        for i in range(1, number_of_tasks+1):
+            used_training_ratio['task'+str(i)] = []
+
+        for i in range(len(log['path1'])):
+            for tasknr in range(1, 7):
+                p = log['path' + str(tasknr)][i]
+                train_count = log['train' + str(tasknr)][i]
+                used_training_ratio['task' + str(tasknr)].append(Exp2_plotter.used_training_ratio(train_count, p))
+
+        return used_training_ratio
+
+    @staticmethod
+    def used_training_ratio(training_counter, path):
+        total_training = 0
+        training_in_path = 0
+        for layer, active_modules in zip(training_counter, path):
+            for i, module in enumerate(layer):
+                total_training += module
+                if i in active_modules:
+                    training_in_path += module
+        print(training_in_path, path)
+        return training_in_path/total_training
+
+    def boxplot_used_training_ratio(self, save_file=None, lock=True):
+        offsets = [-0.1, -0.05, 0.05, 0.1, -0.15, 0.15]
+        def draw_plot(data, offset, edge_color, fill_color):
+            pos = np.arange(self.number_of_tasks)+offset
+            bp = ax.boxplot(data, positions=pos, widths=0.1, patch_artist=True, manage_xticks=False)
+            for element in ['boxes', 'whiskers', 'fliers', 'medians', 'caps']:
+                plt.setp(bp[element], color=edge_color)
+            for patch in bp['boxes']:
+                patch.set(facecolor=fill_color)
+
+        fig, ax = plt.subplots()
+        plt.title('Used training ratio')
+
+
+        handles = []
+        for i, (exp_name, log) in enumerate(self.logs.items()):
+            ratio_list = Exp2_plotter.usefull_training_pr_task(log)
+            boxes = [None]*self.number_of_tasks
+            for k, v in ratio_list.items():
+                boxes[int(k[-1])-1] = v
+
+            draw_plot(boxes, offsets[i], self.colors[i], "white")
+            handles.append(mpatches.Patch(color=self.colors[i], label=exp_name))
+
+        plt.xticks(range(self.number_of_tasks+1))
+        plt.legend(handles=handles)
+        plt.xlabel('Task')
+        plt.ylabel('Usefull training ratio')
+
+        if save_file is not None:
+            plt.savefig(save_file+ '.png')
+        plt.show(block=lock)
+

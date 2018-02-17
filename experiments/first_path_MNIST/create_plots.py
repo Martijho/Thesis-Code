@@ -1,15 +1,15 @@
 import sys
-sys.path.append('../')
+sys.path.append('../../')
 from plotcreator import Exp1_plotter
 import pickle
 import numpy as np
 
 log = None
-dir = '../../../logs/first_path_MNIST/mnist_3layerConv_0.975'
-with open(dir+'/log.pkl', 'rb') as file:
+dir = '../../../logs/first_path_MNIST/'
+with open(dir+'mnist_3layerConv_0.975/log.pkl', 'rb') as file:
     log = pickle.load(file)
 
-with open('task-flipped/log.pkl', 'rb') as file:
+with open(dir+'task-flipped/log.pkl', 'rb') as file:
     f_log = pickle.load(file)
 
 print('LOG WITH', len(log['s+s:path1']), 'EXPERIMENTS')

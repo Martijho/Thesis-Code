@@ -5,6 +5,7 @@ from reprint import output
 import numpy as np
 import random
 import time
+import copy
 
 
 class PathSearch:
@@ -222,7 +223,7 @@ class PathSearch:
         t_stop = 0
         competing = None
         fitness = None
-        log = {'path':[], 'fitness':[], 'avg_training':[]}
+        log = {'paths':[], 'fitness':[], 'training_counter':[], 'selected_paths':[]}
 
         if task is None: task = self.pathnet._tasks[-1]
 
@@ -247,21 +248,18 @@ class PathSearch:
                 training_fitness = TS_box.train(self.pathnet, competing, indecies, x, y,
                                                 task, training_iterations=50, batch_size=16, output_lines=out_channel)
 
-                if selection_pressure >= 5:
+                if selection_pressure >= 0:
                     fitness = TS_box.evaluate(self.pathnet, competing, indecies, x, y,
                                               task, evaluation_size=800, output_lines=out_channel)
                 else: fitness = training_fitness
 
-
                 competing, fitness, indecies = TS_box.sort_by_fitness(competing, fitness, indecies=indecies)
 
-
-                log['path'].append(competing)
+                #Logging
+                log['paths'].append(copy.deepcopy(population))
                 log['fitness'].append(fitness)
-                log['avg_training'].append([])
-                for path in competing:
-                    _, avg_training = Analytic.training_along_path(path, self.pathnet.training_counter)
-                    log['avg_training'][-1].append(avg_training)
+                log['training_counter'].append(copy.deepcopy(self.pathnet.training_counter))
+                log['selected_paths'].append(indecies)
 
                 population = replace_func(competing, indecies, population, mutation_probability=mutation_prob,
                                           width=self.pathnet.width)
@@ -278,7 +276,11 @@ class PathSearch:
 
                 t_stop = time.time()
 
-            return competing[0], fitness[0], log
+            final_fitness = TS_box.evaluate(self.pathnet, population, list(range(len(population))), x, y,
+                                            task, evaluation_size=800, output_lines=output_lines)
+            population, final_fitness, indecies = TS_box.sort_by_fitness(competing, final_fitness,
+                                                                         indecies=list(range(len(population))))
+            return population[0], final_fitness[0], log
 
 
 class TS_box:
@@ -294,7 +296,6 @@ class TS_box:
 
         for i, genome in zip(indecies, selection):
             model = pathnet.path2model(genome, task)
-
             batch = np.random.randint(0, len(x), batch_size*training_iterations)
             local_fitness = model.fit(x[batch], y[batch], batch_size=16, epochs=1,
                                       verbose=0, validation_split=0.0).history['acc'][0]
