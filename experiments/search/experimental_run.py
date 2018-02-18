@@ -71,16 +71,14 @@ class SearchExperiment:
             training_counter =copy.deepcopy(self.pn.training_counter)
 
             self.pn.save_new_optimal_path(p, task)
+            model = self.pn.path2model(p, task)
 
-            training.append(training_counter)
             paths.append(p)
             fitness.append(f)
-            logs.append(log)
-
-            model = self.pn.path2model(p, task)
             evaluated.append(model.evaluate(x_t, y_t, batch_size=16, verbose=False)[1])
-
-            generations.append(len(log['path']))
+            training.append(training_counter)
+            generations.append(len(log['paths']))
+            logs.append(log)
 
         return {'paths': paths,
                 'fitness': fitness,
@@ -101,22 +99,13 @@ def get_data_list():
     x2, y2, x_t2, y_t2 = data.sample_dataset([5, 6, 7, 8, 9])
     x3, y3, x_t3, y_t3 = data.sample_dataset([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 
-
     data = DataPrep()
     data.cSVHN_ez()
     data.x, data.y, data.x_test, data.y_test = data.x[:10000], data.y[:10000], data.x_test[:4000], data.y_test[:4000]
 
-
     x4, y4, x_t4, y_t4 = data.sample_dataset([0, 1, 2, 3, 4])
     x5, y5, x_t5, y_t5 = data.sample_dataset([5, 6, 7, 8, 9])
     x6, y6, x_t6, y_t6 = data.sample_dataset([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-
-    print('Task1', x1.shape, x_t1.shape)
-    print('Task2', x2.shape, x_t2.shape)
-    print('Task3', x3.shape, x_t3.shape)
-    print('Task4', x4.shape, x_t4.shape)
-    print('Task5', x5.shape, x_t5.shape)
-    print('Task6', x6.shape, x_t6.shape)
 
     return [(x1, y1, x_t1, y_t1), (x2, y2, x_t2, y_t2),
             (x3, y3, x_t3, y_t3), (x4, y4, x_t4, y_t4),
@@ -205,6 +194,12 @@ def experiment_high_only_flipped():
     return dicts, data
 
 def run_experiment(filename, data, parameters):
+
+    experiment = SearchExperiment(data, parameters)
+    l = experiment.run()
+    print('\n\tFitness:\t', l['fitness'])
+    print('\tEvaluated:\t', l['evaluated'])
+
     try:
         with open('../../../logs/search/'+filename+'.pkl', 'rb') as file:
             log = pkl.load(file)
@@ -216,9 +211,6 @@ def run_experiment(filename, data, parameters):
                'gen1':   [], 'gen2':   [], 'gen3':   [], 'gen4':   [], 'gen5':   [], 'gen6':   [],
                'log1':   [], 'log2':   [], 'log3':   [], 'log4':   [], 'log5':   [], 'log6':   []}
 
-    experiment = SearchExperiment(data, parameters)
-    l = experiment.run()
-
     for j in range(len(parameters)): log['path' + str(j + 1)].append(l['paths'][j])
     for j in range(len(parameters)): log['fit' + str(j + 1)].append(l['fitness'][j])
     for j in range(len(parameters)): log['eval' + str(j + 1)].append(l['evaluated'][j])
@@ -228,10 +220,6 @@ def run_experiment(filename, data, parameters):
 
     #pn_plotter = PathNetPlotter(experiment.pn)
     #pn_plotter.plot_paths(l['paths'], filename='iter'+str(i))
-
-    print('\n\tFitness:\t', l['fitness'])
-    print('\tEvaluated:\t', l['evaluated'])
-
 
     with open('../../../logs/search/'+filename+'.pkl', 'wb') as f:
         pkl.dump(log, f)
@@ -293,34 +281,36 @@ log_names = [log_h2l, log_l2h, log_recomb, log_l, log_h]
 exp_functions = [experiment_high_to_low, experiment_low_to_high, experiment_recomb, experiment_low_only, experiment_high_only]
 
 if __name__ == "__main__":
-    log_name = 'BUG'
-    exp_func = None
-    if sys.argv[0] == 'high':
-        log_name = log_h
-        exp_func = experiment_high_only
-    if sys.argv[0] == 'low':
-        log_name = log_l
-        exp_func = experiment_low_only
-    if sys.argv[0] == 'high2low':
-        log_name = log_h2l
-        exp_func = experiment_high_to_low
-    if sys.argv[0] == 'low2high':
-        log_name = log_l2h
-        exp_func = experiment_low_to_high
-    if sys.argv[0] == 'recomb':
-        log_name = log_recomb
-        exp_func = experiment_recomb
 
     i = 1
     while True:
-        print('\n\n\n')
-        THREAD_RUNNING = True
+        for name, func in zip(log_names, exp_functions):
+            if sys.argv[1] == 'all':
+                log_name = name
+                exp_func = func
+            if sys.argv[1] == 'high':
+                log_name = log_h
+                exp_func = experiment_high_only
+            if sys.argv[1] == 'low':
+                log_name = log_l
+                exp_func = experiment_low_only
+            if sys.argv[1] == 'high2low':
+                log_name = log_h2l
+                exp_func = experiment_high_to_low
+            if sys.argv[1] == 'low2high':
+                log_name = log_l2h
+                exp_func = experiment_low_to_high
+            if sys.argv[1] == 'recomb':
+                log_name = log_recomb
+                exp_func = experiment_recomb
 
-        print('\t\t\t\tEXPERIMENTAL RUN', i, '-', log_name)
-        param, data = exp_func()
-        thread = ExperimentationThread(log_name, data, param)
-        thread.start()
-        thread.join()
+            print('\n\n\n')
+            print('\t\t\t\tEXPERIMENTAL RUN', i, '-', log_name)
+            param, data = exp_func()
+            thread = ExperimentationThread(log_name, data, param)
+            thread.start()
+            thread.join()
+            i+=1
 
 
 

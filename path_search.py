@@ -223,7 +223,7 @@ class PathSearch:
         t_stop = 0
         competing = None
         fitness = None
-        log = {'paths':[], 'fitness':[], 'training_counter':[], 'selected_paths':[]}
+        log = {'paths':[], 'fitness':[], 'training_counter':[], 'index_of_selected':[]}
 
         if task is None: task = self.pathnet._tasks[-1]
 
@@ -259,7 +259,7 @@ class PathSearch:
                 log['paths'].append(copy.deepcopy(population))
                 log['fitness'].append(fitness)
                 log['training_counter'].append(copy.deepcopy(self.pathnet.training_counter))
-                log['selected_paths'].append(indecies)
+                log['index_of_selected'].append(indecies)
 
                 population = replace_func(competing, indecies, population, mutation_probability=mutation_prob,
                                           width=self.pathnet.width)
