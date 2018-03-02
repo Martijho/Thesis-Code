@@ -1,11 +1,8 @@
-import sys
-sys.path.append('../')
-from datetime import datetime as dt
 from matplotlib import pyplot as plt
 import matplotlib.patches as mpatches
 from analytic import Analytic
 import numpy as np
-import random
+import time
 
 # First path experiments + Flipped Search+Search
 class Exp1_plotter:
@@ -316,6 +313,8 @@ class Exp2_plotter:
         self.logs = logs
         self.number_of_tasks = number_of_tasks
         self.colors = ['#dd2020', '#e8bd00', '#7b6500', '#0fcf71', '#409edb', '#e55d82']
+        self.colors_by_name = {}
+        for k, color in zip(logs.keys(), self.colors): self.colors_by_name[k] = color
 
     @staticmethod
     def average_reuse(log, number_of_tasks=6):
@@ -377,8 +376,307 @@ class Exp2_plotter:
                 total_training += module
                 if i in active_modules:
                     training_in_path += module
-        print(training_in_path, path)
         return training_in_path/total_training
+
+    @staticmethod
+    def search_diversity(population, diversity_metric_function):
+        diversity = []
+        for i, gen in enumerate(population):
+            diversity_metric = diversity_metric_function(gen, 20)
+            diversity.append(diversity_metric)
+
+        return diversity
+
+    @staticmethod
+    def get_average_search_diversity(log, task_nr, diversity_metric_function):
+        diversity = 0
+
+        for search in log['log'+str(task_nr)]:
+            search_diversity = []
+            for gen in search['paths']:
+                div = diversity_metric_function(gen, 20)
+                search_diversity.append(sum(div)/len(div))
+
+            diversity = diversity + np.array(search_diversity)
+
+        return diversity / len(log['log1'])
+
+
+
+    @staticmethod
+    def get_training_fitness_list(log):
+        tasks = [[[] for _ in range(100)] for _ in range(6)]
+        for met, data in log.items():
+            if 'log' in met:
+                i = int(met[-1]) - 1
+                for example in data:
+                    try:
+                        for gen, pop in enumerate(example['fitness']):
+                            tasks[i][gen].append(sum(pop) / len(pop))
+                    except KeyError:
+                        for gen, pop in enumerate(example[b'fitness']):
+                            tasks[i][gen].append(sum(pop) / len(pop))
+        return tasks
+
+    @staticmethod
+    def used_capacity(log, L=3, M=20):
+        capacity = []
+        for i in range(len(log['path1'])):
+            used = np.zeros([L, M], dtype=bool)
+            for pnr in range(1, 7):
+                p = log['path'+str(pnr)][i]
+                for layer_nr, layer in enumerate(p):
+                    for module in layer:
+                        used[layer_nr][module] = True
+            capacity.append(np.sum(used))
+        return capacity
+
+    @staticmethod
+    def average_validation_for_each_search(log):
+        acc = []
+        for i in range(len(log['eval1'])):
+            evaluations = [log['eval'+str(6)][i] for tasknr in range(1, 7)]
+            acc.append(sum(evaluations)/len(evaluations))
+        return acc
+
+    @staticmethod
+    def plot_training_progress_for_one_search_type(log):
+        tasks = Exp2_plotter.get_training_fitness_list(log)
+
+        def draw_plot(data, offset, edge_color, fill_color, ax):
+            pos = np.arange(100) + offset
+            bp = ax.boxplot(data, positions=pos, widths=0.1, patch_artist=True, manage_xticks=False)
+            for element in ['boxes', 'whiskers', 'fliers', 'medians', 'caps']:
+                plt.setp(bp[element], color=edge_color)
+            for patch in bp['boxes']:
+                patch.set(facecolor=fill_color)
+
+        fig, axes = plt.subplots(2, 3)
+        plt.title('Training progress')
+
+        for i in range(2):
+            for j in range(3):
+                draw_plot(tasks[i*3+j], 0, '#dd2020', 'white', axes[i, j])
+                #plt.xticks(range(100))
+                axes[i, j].set_xlabel('Generation')
+                axes[i, j].set_ylabel('Training accuracy')
+                axes[i, j].set_title('Task '+str(i*3+j+1))
+                axes[i, j].set_ylim([0, 1])
+        plt.show()
+
+    @staticmethod
+    def capacity_used_during_search(log):
+
+        capacity_list = []
+        for exp_nr in range(len(log['log1'])):
+            experiment_capacity_list = []
+            locked = np.zeros([3, 20], dtype=bool)
+            for task_nr in range(1, 7):
+                try:
+                    generation_list = log['log'+str(task_nr)][exp_nr]['paths']
+                except KeyError:
+                    generation_list = log['log'+str(task_nr)][exp_nr][b'paths']
+                generation_capacity_list = []
+                for gen in generation_list:
+
+                    genotype_capacity_list = []
+                    for path in gen:
+                        genotype = Analytic.encode_path(path, 20)
+                        tmp_capacity_used = np.logical_or(locked, genotype)
+                        genotype_capacity_list.append(np.sum(tmp_capacity_used))
+
+                    generation_capacity_list.append(genotype_capacity_list)
+
+                try:
+                    locked = np.logical_or(locked, Analytic.encode_path(log['path'+str(task_nr)][exp_nr], 20))
+                except KeyError:
+                    locked = np.logical_or(locked, Analytic.encode_path(log[b'path' + str(task_nr)][exp_nr], 20))
+
+                experiment_capacity_list += generation_capacity_list
+
+            capacity_list.append(experiment_capacity_list)
+
+        return capacity_list
+
+    @staticmethod
+    def training_iterations(log):
+        training = []
+        for i in range(len(log['path1'])):
+            mask = np.zeros([3, 20], dtype=bool)
+            for task_nr in range(1, 7):
+                path = log['path'+str(task_nr)][i]
+                mask = np.logical_or(np.array(Analytic.encode_path(path, 20), dtype=bool), mask)
+            training.append(np.sum((np.array(log['train6'][1])*mask)))
+
+        return training
+
+    @staticmethod
+    def cumulative_validation(log):
+        acc = []
+        for i in range(len(log['eval1'])):
+            total = 0
+            for task_nr in range(1, 7):
+                total += log['eval'+str(task_nr)][i]
+            acc.append(total)
+
+        return acc
+
+    @staticmethod
+    def total_capacity(log):
+        capacity = []
+        for i in range(len(log['path1'])):
+            mask = np.zeros([3, 20], dtype=bool)
+            for task_nr in range(1, 7):
+                path = log['path'+str(task_nr)][i]
+                mask = np.logical_or(np.array(Analytic.encode_path(path, 20), dtype=bool), mask)
+            capacity.append(np.sum(mask))
+
+        return capacity
+
+    @staticmethod
+    def total_reuse(log):
+        reuse = 0
+        for exp_nr in range(len(log['log1'])):
+            experiment_reuse = []
+            locked_paths = [log['path1'][exp_nr]]
+            for task_nr in range(2, 7):
+                try:
+                    generation_list = log['log'+str(task_nr)][exp_nr]['paths']
+                except KeyError:
+                    generation_list = log['log'+str(task_nr)][exp_nr][b'paths']
+
+                for generation in generation_list:
+                    generation_reuse = []
+                    for genotype in generation:
+                        generation_reuse.append(sum([sum(x) for x in Exp2_plotter.reuse_table(locked_paths+[genotype])]))
+                    experiment_reuse.append(sum(generation_reuse)/len(generation_reuse))
+
+                locked_paths.append(log['path'+str(task_nr)][exp_nr])
+            reuse = reuse + np.array(experiment_reuse)
+        reuse = reuse / len(log['log1'])
+        return reuse
+
+    @staticmethod
+    def get_average_path_size(log, task):
+        avg = 0
+        for exp in range(len(log['log'+str(task)])):
+            experiment_avg = []
+
+            try:             data = log['log'+str(task)][exp]['paths']
+            except KeyError: data = log['log'+str(task)][exp][b'paths']
+
+            for generation in data:
+                total = 0
+                for genotype in generation: total += len(sum(genotype, []))
+                experiment_avg.append(total/len(generation))
+            avg = avg + np.array(experiment_avg)
+        return avg/len(log['log'+str(task)])
+
+    @staticmethod
+    def get_average_layer_size(log):
+
+        size_list = []
+        for task in range(1, 7):
+            avg = 0
+
+            for i, path in enumerate(log['path'+str(task)]):
+
+                sizes = [len(layer) for layer in path]
+                avg = avg + np.array(sizes)
+
+            size_list.append(avg/(i+1))
+        return size_list
+
+    def plot_training_progress(self, save_file=None, lock=True):
+        data = {}
+        for k, v in self.logs.items(): data[k] = Exp2_plotter.get_training_fitness_list(v)
+        f, axarr = plt.subplots(2, 3, sharex=True, sharey=True)
+
+        handles = [[], [], [], [], [], []]
+        for i in range(2):
+            for j in range(3):
+                ax = axarr[i, j]
+
+                for k, v in data.items():
+                    y = np.average(np.array(v[i * 3 + j]), axis=1)
+
+                    '''
+                    # Adding scatter to the plot
+                    x = np.arange(100)+1
+                    for xi in range(6):
+                        ax.scatter(x-1, np.array(v[i * 3 + j])[:, i], s=1, color=self.colors_by_name[k], alpha=0.1)
+                    '''
+
+                    ax.plot(y, color=self.colors_by_name[k], label=k)
+                    handles[i*3+j].append(mpatches.Patch(color=self.colors_by_name[k], label=k))
+
+                ax.set_ylim([0, 1.1])
+                ax.set_xlim([-1, 101])
+                ax.set_title('Task ' + str(i*3+j+1))
+                ax.yaxis.grid(color='gray', linestyle='-', linewidth=2, alpha=0.25)
+                if j == 0: ax.set_ylabel('avg Training acc')
+                if i == 1: ax.set_xlabel('Generation')
+                for k in data.keys():
+                    eval_fitness = self.logs[k]['eval' + str(i * 3 + j + 1)]
+                    avg_fitness = sum(eval_fitness) / len(eval_fitness)
+                    ax.plot([-3, 103], [avg_fitness, avg_fitness], ':', color=self.colors_by_name[k])
+
+        ax.legend(bbox_to_anchor=(1.05, 0), loc='lower left', borderaxespad=0.)
+        plt.suptitle('Training Accuracy')
+
+        fig = plt.gcf()
+        fig.set_size_inches(18.5, 10.5)
+
+        if save_file is not None:
+            plt.savefig(save_file + '.png')
+        plt.show(block=lock)
+
+    def plot_population_diversity(self, log, name, lock=True, save_file=None, diversity_metric=Analytic.homemade_diversity):
+        f, axarr = plt.subplots(2, 3, sharex=True, sharey=True)
+        colors = ['red', 'green', 'blue']
+        logs = ['log1', 'log2', 'log3', 'log4', 'log5', 'log6']
+        for i in range(2):
+            for j in range(3):
+                ax = axarr[i, j]
+                dict_name = logs[i*3+j]
+
+                div_list = []
+                for exp_number in range(len(log[dict_name])):
+                    try:             pop = log[dict_name][exp_number]['paths']
+                    except KeyError: pop = log[dict_name][exp_number][b'paths']
+                    div_metric = Exp2_plotter.search_diversity(pop, diversity_metric)
+                    div_list.append(div_metric)
+
+                div_vec = np.array(div_list)
+
+                for layer_nr in range(3):
+                    top = np.max(div_vec[:, :, layer_nr], axis=0)
+                    bot = np.min(div_vec[:, :, layer_nr], axis=0)
+                    ax.fill_between(np.arange(100), top, bot, color=colors[layer_nr], alpha=0.2)
+
+                div_average = np.average(div_vec, axis=0)
+
+                ax.set_title('Task ' + str(i*3+j+1))
+                ax.plot(div_average[:, 0], label='layer 1', color=colors[0])
+                ax.plot(div_average[:, 1], label='layer 2', color=colors[1])
+                ax.plot(div_average[:, 2], label='layer 3', color=colors[2])
+                if j == 0: ax.set_ylabel('Population Diversity')
+                if i == 1: ax.set_xlabel('Generation')
+                #ax.set_ylim([0, 5])
+
+        ax.legend(['layer 1', 'layer 2', 'layer 3'], bbox_to_anchor=(1.05, 0),
+                  loc='lower left', borderaxespad=0.)
+        if diversity_metric == Analytic.homemade_diversity:
+            plt.suptitle('Population Diversity(Home-made): '+ name)
+        else:
+            plt.suptitle('Population Diversity(Pair-wise Hamming): ' + name)
+
+        fig = plt.gcf()
+        fig.set_size_inches(18.5, 10.5)
+
+        if save_file is not None:
+            plt.savefig(save_file + '.png')
+        plt.show(block=lock)
 
     def boxplot_used_training_ratio(self, save_file=None, lock=True):
         offsets = [-0.1, -0.05, 0.05, 0.1, -0.15, 0.15]
@@ -409,7 +707,261 @@ class Exp2_plotter:
         plt.xlabel('Task')
         plt.ylabel('Usefull training ratio')
 
+        fig = plt.gcf()
+        fig.set_size_inches(18.5, 10.5)
         if save_file is not None:
             plt.savefig(save_file+ '.png')
         plt.show(block=lock)
 
+    def validation_fitness(self, save_file=None, lock=True):
+        boxes = {}
+        for algo, log in self.logs.items():
+            task_fitness = [0, 0, 0, 0, 0, 0]
+
+            print(log['eval1'])
+            task_fitness[0] = log['eval1']
+            task_fitness[1] = log['eval2']
+            task_fitness[2] = log['eval3']
+            task_fitness[3] = log['eval4']
+            task_fitness[4] = log['eval5']
+            task_fitness[5] = log['eval6']
+
+            #task_fitness = (np.array(task_fitness) / len(log['eval1'])).tolist()
+            boxes[algo] = task_fitness
+
+        offsets = [-0.1, -0.05, 0.05, 0.1, -0.15, 0.15]
+        def draw_plot(data, offset, edge_color, fill_color):
+            pos = np.arange(self.number_of_tasks)+offset
+            bp = ax.boxplot(data, positions=pos, widths=0.1, patch_artist=True, manage_xticks=False)
+            for element in ['boxes', 'whiskers', 'fliers', 'medians', 'caps']:
+                plt.setp(bp[element], color=edge_color)
+            for patch in bp['boxes']:
+                patch.set(facecolor=fill_color)
+
+        fig, ax = plt.subplots()
+        plt.title('Validation accuracy')
+
+        handles = []
+        for i, (algo_name, validation) in enumerate(boxes.items()):
+            draw_plot(validation, offsets[i], self.colors[i], 'white')
+            handles.append(mpatches.Patch(color=self.colors[i], label=algo_name))
+
+        plt.xticks(range(self.number_of_tasks+1))
+        plt.legend(handles=handles)
+        plt.xlabel('Task')
+        plt.ylabel('Validation accuracy')
+
+        fig = plt.gcf()
+        fig.set_size_inches(18.5, 10.5)
+
+        if save_file is not None:
+            plt.savefig(save_file + '.png')
+        plt.show(block=lock)
+
+    def plot_capacity_vs_fitness(self, save_file=None, lock=True):
+        plt.figure('Capacity effectivity')
+        handles = []
+        for algo_name, log in self.logs.items():
+            x = Exp2_plotter.average_validation_for_each_search(log)
+            y = Exp2_plotter.used_capacity(log)
+
+            plt.scatter(x, y, color=self.colors_by_name[algo_name])
+            handles.append(mpatches.Patch(color=self.colors_by_name[algo_name], label=algo_name))
+        plt.title('PathNet usage')
+        plt.xlabel('Average validation fitness')
+        plt.ylabel('Used capacity')
+        plt.legend(handles=handles)
+
+        fig = plt.gcf()
+        fig.set_size_inches(18.5, 10.5)
+
+        if save_file is not None:
+            plt.savefig(save_file+ '.png')
+        plt.show(block=lock)
+
+    def plot_capacity_usage(self, save_file=None, lock=True):
+        plt.figure('Used capacity')
+        plt.title('Used capacity')
+
+        handles = []
+        for i, (exp_name, log) in enumerate(self.logs.items()):
+            boxes = np.array(Exp2_plotter.capacity_used_during_search(log))
+            boxes = np.average(np.average(boxes, axis=0), axis=1)
+            for task_nr in range(6):
+                plt.plot(np.arange(100)+(task_nr*100),
+                         boxes[task_nr*100:(task_nr+1)*100],
+                         color=self.colors_by_name[exp_name])
+
+            handles.append(mpatches.Patch(color=self.colors_by_name[exp_name], label=exp_name))
+
+        for i, line in enumerate([6.00, 11.40, 16.26, 20.64, 24.58, 28.12]):
+            x = [i*100, (i+1)*100]
+            y = [line, line]
+            plt.plot(x, y, ':', color='grey', alpha=0.5)
+        handles.append(mpatches.Patch(color='grey', linestyle=':', alpha=0.5, label='Random selection'))
+
+        plt.legend(handles=handles)
+        plt.xlabel('Generation')
+        plt.ylabel('Capcity')
+
+        fig = plt.gcf()
+        fig.set_size_inches(18.5, 10.5)
+
+        if save_file is not None:
+            plt.savefig(save_file + '.png')
+        plt.show(block=lock)
+
+    def plot_training_iterations(self, save_file=None, lock=True):
+        min_capacity = 25
+        max_capacity = 36
+
+        plt.figure('Training Iterations')
+        plt.title('Training Value')
+        handles = []
+        for algo_name, log in self.logs.items():
+            y = Exp2_plotter.training_iterations(log)
+            x = Exp2_plotter.cumulative_validation(log)
+            s = Exp2_plotter.total_capacity(log)
+            s = (np.array(s)-min_capacity)/max_capacity
+            s = (s*680) + 20
+
+            plt.scatter(x, y, s=s, color=self.colors_by_name[algo_name], alpha=0.5)
+            handles.append(mpatches.Patch(color=self.colors_by_name[algo_name], label=algo_name))
+
+        plt.xlabel('Cumulative Validation Accuracy for all Tasks')
+        plt.ylabel('Total Training Iterations')
+        plt.legend(handles=handles)
+
+        fig = plt.gcf()
+        fig.set_size_inches(18.5, 10.5)
+
+        if save_file is not None:
+            plt.savefig(save_file + '.png')
+        plt.show(block=lock)
+
+    def plot_reuse(self, save_file=None, lock=True):
+        plt.figure('Reuse')
+        plt.title('Reuse')
+
+        handles = []
+        for i, (exp_name, log) in enumerate(self.logs.items()):
+            boxes = np.array(Exp2_plotter.total_reuse(log))
+            for task_nr in range(1, 6):
+                plt.plot(np.arange(100) + task_nr*100,
+                         boxes[(task_nr-1)*100:(task_nr)*100],
+                         color=self.colors_by_name[exp_name])
+
+            handles.append(mpatches.Patch(color=self.colors_by_name[exp_name], label=exp_name))
+
+        for i, line in enumerate([0.6, 1.14, 1.62, 2.06, 2.46]):
+            x = [(i+1)*100, (i+2)*100]
+            y = [line, line]
+            plt.plot(x, y, ':', color='grey', alpha=0.5)
+        handles.append(mpatches.Patch(color='grey', linestyle=':', alpha=0.5, label='Random selection'))
+
+        plt.xticks(np.arange(7)*100)
+        plt.legend(handles=handles)
+        plt.xlabel('Generation')
+        plt.ylabel('Reuse')
+        plt.grid(linestyle=':', alpha=0.4)
+
+        fig = plt.gcf()
+        fig.set_size_inches(18.5, 10.5)
+
+        if save_file is not None:
+            plt.savefig(save_file + '.png')
+        plt.show(block=lock)
+
+    def plot_average_path_size(self, save_file=None, lock=True):
+        f, axarr = plt.subplots(2, 3, sharex=True, sharey=True)
+
+        for i in range(2):
+            for j in range(3):
+                ax = axarr[i, j]
+                task_nr = i*3 + j + 1
+
+                for k, v in self.logs.items():
+                    y = Exp2_plotter.get_average_path_size(v, task_nr)
+
+                    ax.plot(y, label=k, color=self.colors_by_name[k])
+
+                ax.set_title('Task ' + str(task_nr))
+                ax.grid(linestyle=':', alpha=0.7)
+                if j == 0: ax.set_ylabel('Average Modules in paths')
+                if i == 1: ax.set_xlabel('Generation')
+
+
+
+        ax.legend(list(self.logs.keys()), bbox_to_anchor=(1.05, 0), loc='lower left', borderaxespad=0.)
+
+        plt.suptitle('Average path size')
+
+        fig = plt.gcf()
+        fig.set_size_inches(18.5, 10.5)
+
+        if save_file is not None:
+            plt.savefig(save_file + '.png')
+        plt.show(block=lock)
+
+    def plot_layer_sizes(self, save_file=None, lock=True):
+        avg_sizes = {}
+        for k, v in self.logs.items(): avg_sizes[k] = Exp2_plotter.get_average_layer_size(v)
+
+        f, axarr = plt.subplots(2, 3, sharex=True, sharey=True)
+
+        exp_positions = [1, 2, 3, 4, 5]
+        offsets = [-0.2, 0, 0.2]
+
+
+        for i in range(2):
+            for j in range(3):
+                ax = axarr[i, j]
+                task_nr = i * 3 + j + 1
+
+                for pos, (k, v) in zip(exp_positions, self.logs.items()):
+                    y = avg_sizes[k][i*3+j]
+                    ax.bar(pos+np.array(offsets), y, 0.15, label=k, color=self.colors_by_name[k])
+
+                ax.set_xticks(range(1, 6))
+                ax.set_xticklabels(list(avg_sizes.keys()))
+                ax.set_title('Task ' + str(task_nr))
+
+                ax.plot([0.5, 5.5], [2, 2], ':', color='grey', alpha=0.5)
+
+                if j == 0: ax.set_ylabel('Average Modules in layer')
+
+
+        plt.suptitle('Average layer size')
+
+        fig = plt.gcf()
+        fig.set_size_inches(18.5, 10.5)
+
+        if save_file is not None:
+            plt.savefig(save_file + '.png')
+        plt.show(block=lock)
+
+    def plot_average_population_diversity(self, save_file=None, lock=True, diversity_metric=Analytic.homemade_diversity):
+        f, axarr = plt.subplots(2, 3, sharex=True, sharey=True)
+
+        for i in range(2):
+            for j in range(3):
+                ax = axarr[i, j]
+
+                for exp_name, log in self.logs.items():
+                    div = Exp2_plotter.get_average_search_diversity(log, i*3+j+1, diversity_metric)
+
+                    ax.plot(div, label=exp_name, color=self.colors_by_name[exp_name])
+
+                if j == 0: ax.set_ylabel('Population Diversity')
+                if i == 1: ax.set_xlabel('Generation')
+
+        ax.legend(list(self.logs.keys()), bbox_to_anchor=(1.05, 0),loc='lower left', borderaxespad=0.)
+
+        plt.suptitle('Population Diversity('+diversity_metric.__name__+')')
+
+        fig = plt.gcf()
+        fig.set_size_inches(18.5, 10.5)
+
+        if save_file is not None:
+            plt.savefig(save_file + '.png')
+        plt.show(block=lock)

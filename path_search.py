@@ -278,10 +278,110 @@ class PathSearch:
 
             final_fitness = TS_box.evaluate(self.pathnet, population, list(range(len(population))), x, y,
                                             task, evaluation_size=800, output_lines=output_lines)
-            population, final_fitness, indecies = TS_box.sort_by_fitness(competing, final_fitness,
-                                                                         indecies=list(range(len(population))))
-            return population[0], final_fitness[0], log
+            #population, final_fitness, indecies = TS_box.sort_by_fitness(competing, final_fitness,
+            #                                                             indecies=list(range(len(population))))
+            best = np.array(final_fitness).argmax()
+            return population[best], final_fitness[best], log
 
+    def dynamic_tournamet_search(self, x, y, task=None, hyperparam=None, verbose=True):
+        if hyperparam is None: hyperparam = {}
+
+        training_iterations = 50   if 'training_iterations' not in hyperparam else hyperparam['training_iterations']
+        batch_size          = 16   if 'batch_size'          not in hyperparam else hyperparam['batch_size']
+        population_size     = 16   if 'population_size'     not in hyperparam else hyperparam['population_size']
+        generation_limit    = 500  if 'generation_limit'    not in hyperparam else hyperparam['generation_limit']
+        threshold_acc       = 0.95 if 'threshold_acc'       not in hyperparam else hyperparam['threshold_acc']
+        selection_pressure  = [2, 5, 10, 15, 20, 25]  if 'selection_pressure'  not in hyperparam else hyperparam['selection_pressure']
+        replace_func        = [TS_box.replace_2to2]*6 if 'replace_func'        not in hyperparam else hyperparam['replace_func']
+        mutation_prob       = 1.0/(self.pathnet.max_modules_pr_layer * self.pathnet.depth)
+        if replace_func is None: replace_func = TS_box.replace_2to2
+
+        assert max(selection_pressure) <= population_size, 'Error: Tournament size larger than population size'
+
+        if verbose:
+            print('\n\t'*3, 'Tournament Search\n\tHyper parameters:')
+            if 'name' in hyperparam: print('\t\t\t', hyperparam['name'])
+            print('\t\tTraining_iterations: ', training_iterations)
+            print('\t\tbatch_size:          ', batch_size)
+            print('\t\tpopulation_size:     ', population_size)
+            print('\t\tgeneration_limit:    ', generation_limit)
+            print('\t\tthreshold_acc:       ', threshold_acc)
+            print('\t\tselection_pressure:  ', selection_pressure)
+            print('\t\treplace_func:        ', '['+ replace_func[0].__name__ +', ... ]')
+            print('\t\tmutation_prob:       ', mutation_prob, '\n\n')
+
+
+        population = [self.pathnet.random_path() for _ in range(population_size)]
+        generation = 0
+        t_start = 0
+        t_stop = 0
+        competing = None
+        fitness = None
+        log = {'paths':[], 'fitness':[], 'training_counter':[], 'index_of_selected':[]}
+
+        if task is None: task = self.pathnet._tasks[-1]
+
+        with output(output_type='list') as output_lines:
+            if verbose:
+                output_lines[0] = '='*15+' Generation 0 ' + '='*15
+                for ind in population:
+                    output_lines.append(str(ind).ljust(55)+'-'*4)
+                output_lines.append('Selection Pressure:   '+ str(selection_pressure[0]))
+                output_lines.append('Replacement function: ' + replace_func[0].__name__)
+                for _ in range(3): output_lines.append(' ')
+
+            while generation < generation_limit:
+
+                generation += 1
+                sel_press = selection_pressure[int((generation-1)*len(selection_pressure)/generation_limit)]
+                replacement_function = replace_func[int((generation-1)*len(replace_func)/generation_limit)]
+
+                output_lines[population_size+1] = 'Selection Pressure:   ' + str(sel_press)
+                output_lines[population_size+2] = 'Replacement function: ' + replacement_function.__name__
+
+                output_lines[0] = output_lines[0] = '='*15+' Generation '+str(generation)+' ' + '='*15 + '\t' + str(t_stop-t_start)
+                t_start = time.time()
+
+                competing, indecies = TS_box.selection(population, sel_press)
+                out_channel = output_lines if verbose else None
+
+                training_fitness = TS_box.train(self.pathnet, competing, indecies, x, y,
+                                                task, training_iterations=50, batch_size=16, output_lines=out_channel)
+
+                if sel_press >= 0:
+                    fitness = TS_box.evaluate(self.pathnet, competing, indecies, x, y,
+                                              task, evaluation_size=800, output_lines=out_channel)
+                else: fitness = training_fitness
+
+                competing, fitness, indecies = TS_box.sort_by_fitness(competing, fitness, indecies=indecies)
+
+                #Logging
+                log['paths'].append(copy.deepcopy(population))
+                log['fitness'].append(fitness)
+                log['training_counter'].append(copy.deepcopy(self.pathnet.training_counter))
+                log['index_of_selected'].append(indecies)
+
+                population = replacement_function(competing, indecies, population, mutation_probability=mutation_prob,
+                                          width=self.pathnet.width)
+
+                if replacement_function == TS_box.replace_2to2:         subsection = int(len(indecies)/2)
+                if replacement_function == TS_box.replace_3to2:         subsection = 2*int(len(indecies)/3)
+                if replacement_function == TS_box.winner_replace_all:   subsection = 1
+                if verbose:
+                    for i, pop, fit in zip(indecies[subsection:], competing[subsection:], fitness[subsection:]):
+                        output_lines[i+1] = str(population[i]).ljust(54) + ('[%.1f' % (fit*100)) + ' %]'
+
+
+                if fitness[0] >= threshold_acc or generation == generation_limit: break
+
+                t_stop = time.time()
+
+            final_fitness = TS_box.evaluate(self.pathnet, population, list(range(len(population))), x, y,
+                                            task, evaluation_size=800, output_lines=output_lines)
+            # population, final_fitness, indecies = TS_box.sort_by_fitness(competing, final_fitness,
+            #                                                             indecies=list(range(len(population))))
+            best = np.array(final_fitness).argmax()
+            return population[best], final_fitness[best], log
 
 class TS_box:
     @staticmethod

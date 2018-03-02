@@ -1,6 +1,7 @@
 from __future__ import print_function
 import sys
 import numpy as np
+import random
 from matplotlib import pyplot as plt
 sys.path.append('../')
 from path_search import TS_box
@@ -60,7 +61,7 @@ def plot_simulated_convergance_time():
 
 def calculate_population_diversity_by_layer_in_random_initialization():
     t = np.zeros(3)
-    for i in range(1000):
+    for i in range(10000):
         pop = []
         for _ in range(64):
             max = 3
@@ -76,9 +77,52 @@ def calculate_population_diversity_by_layer_in_random_initialization():
             pop.append(path)
 
 
-        similarity_metric = Analytic.population_diversity(pop, 20)
+        similarity_metric = Analytic.euclidean_centroid_diversity(pop, 20)
         t += np.array(similarity_metric)
 
-    print(t/1000)
+    print(t/10000)
+    print(sum(t/10000)/3)
+
+def capacity_use():
+    use = [0, 0, 0, 0, 0, 0]
+    reuse = [0, 0, 0, 0, 0, 0]
+    K = 10**6
+    for x in range(K):
+        net = np.zeros([20])
+
+        for i in range(6):
+            number_of_modules = random.sample([1, 2, 3], 1)[0]
+
+            modules = random.sample(list(range(20)), number_of_modules)
+            path = np.zeros([20])
+            path[modules] = 1
+            reuse[i] += np.sum(np.logical_and(net, path))
+            net = np.logical_or(net, path)
+            use[i] += np.sum(net)
+    print()
+    for i, e in enumerate(use):
+        print('Task', i+1,'-', (e/K)*3, '\tReuse:', reuse[i]*3/K )
+
+def reuse():
+    reuse = [0, 0, 0, 0, 0, 0]
+    K = 10**6
+    for x in range(K):
+        net = np.zeros([20])
+
+        for i in range(6):
+            number_of_modules = random.sample([1, 2, 3], 1)[0]
+            modules = random.sample(list(range(20)), number_of_modules)
+            path = np.zeros([20])
+            path[modules] = 1
+            reuse[i] += np.sum(np.logical_and(net, path))
+
+            net = np.logical_or(net, path)
+
+    print()
+    for i, e in enumerate(reuse):
+        print('Task', i+1,'-', reuse[i]*3/K )
 
 
+calculate_population_diversity_by_layer_in_random_initialization()
+
+#plot_simulated_convergance_time()

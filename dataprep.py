@@ -146,6 +146,32 @@ class DataPrep:
         self.y = data_dict['y'][:train_size]
         self.y_test = data_dict['y'][train_size:]
 
+    def limit_data(self, training, validation, balance=True):
+        assert len(self.x) >= training, 'Error in DataPrep-limit_data: not enough training data'
+        assert len(self.x_test) >= validation, 'Error in DataPrep-limit_data: not enough validation data'
+
+        if not balance:
+            self.x = self.x[:training]
+            self.y = self.y[:training]
+            self.x_test = self.x_test[:validation]
+            self.y_test = self.y_test[:validation]
+        else:
+            t_limit = int(training/self.output_size)
+            v_limit = int(validation/self.output_size)
+
+            x, y, x_t, y_t = [], [], [], []
+            for c in range(self.output_size):
+                cx, cy, cx_t, cy_t = self.get_class(c)
+
+                assert len(cx) >= t_limit, 'Not enough training data of class ' + str(c)
+                assert len(cx_t) >= v_limit, 'Not enough validation data of class ' + str(c)
+
+                x.append(cx[:t_limit])
+                y.append(cy[:t_limit])
+                x_t.append(cx_t[:v_limit])
+                y_t.append(cy_t[:v_limit])
+
+            self.x, self.y, self.x_test, self.y_test = self.shuffle_data(x, y, x_t, y_t)
 
     def cSVHN(self, validation_split=0.3):
         self.input_shape = [32, 32, 3]

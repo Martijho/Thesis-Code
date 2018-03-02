@@ -143,6 +143,44 @@ class PathNet:
         return pathnet, task
 
     @staticmethod
+    def overfit_experiment():
+        conv_config = [{'channels': 2, 'kernel': (3, 3), 'stride': (1, 1), 'activation': 'relu'}]
+        input_shape = [32, 32, 3]
+        output_size = 10
+        depth = 3
+        width = 6
+        max_modules_pr_layer = 3
+        min_modules_pr_layer = 1
+        learning_rate = 0.0001
+        optimizer_type = Adam
+        loss = 'categorical_crossentropy'
+        flatten_in_unique = True
+
+        layers = []
+        layers.append(ConvLayer(width, 'L0', conv_config))
+        layers.append(ConvLayer(width, 'L1', conv_config))
+        layers.append(ConvLayer(width, 'L2', conv_config, maxpool=True))
+
+        Layer.initialize_whole_network(layers, input_shape)
+
+        task = TaskContainer(input_shape, output_size, flatten_in_unique, name='unique_1',
+                             optimizer=optimizer_type, loss=loss, lr=learning_rate)
+
+        pathnet = PathNet(input_shape=input_shape, width=width, depth=depth, max_models_before_reset=80)
+        pathnet._layers = layers
+        pathnet._tasks = [task]
+        pathnet.max_modules_pr_layer = max_modules_pr_layer
+        pathnet.min_modules_pr_layer = min_modules_pr_layer
+
+        for layer in pathnet._layers:
+            layer.save_initialized_weights()
+
+        p = pathnet.random_path()
+        pathnet.path2model(p, task)
+
+        return pathnet, task
+
+    @staticmethod
     def search_experiment(output_size=10, image_shape=None):
         conv_config             = [{'channels': 2, 'kernel': (3, 3), 'stride': (1, 1), 'activation': 'relu'}]
         dens_config             = [{'out': 20, 'activation': 'relu'}]

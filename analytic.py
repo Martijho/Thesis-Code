@@ -91,9 +91,6 @@ class Analytic:
             print()
         print('='*56, '\n')
     '''
-    def parameters_along_path(self, path):
-        model = self.pathnet.path2model(path)
-        return model.count_params()
 
 
     def _usefull_training_ratio(self, optimal_path, training_counter):
@@ -162,24 +159,39 @@ class Analytic:
         return reuse
 
     @staticmethod
-    def encode_path(path, L):
+    def encode_path(path, pathnet_width):
         encoded = []
         for l in path:
-            layer = np.zeros(L)
+            layer = np.zeros(pathnet_width)
             layer[l] = 1
             encoded.append(layer)
         return encoded
 
+    @staticmethod
+    def pairwise_hamming(population, pathnet_width):
+        tmp = []
+        for p in population:
+            tmp.append(Analytic.encode_path(p, pathnet_width))
+        population = tmp
+
+        H = [0, 0, 0]
+        for layer in range(3):
+            for j in range(len(population) - 1):
+                for j_ in range(j + 1, len(population)):
+                    for i in range(pathnet_width):
+                        H[layer] += abs(population[j][layer][i] - population[j_][layer][i])
+
+        return [sum(H)]
 
     @staticmethod
-    def population_diversity(population, L):
+    def homemade_diversity(population, pathnet_width):
         encoded_population = []
-        for path in population: encoded_population.append(Analytic.encode_path(path, L))
+        for path in population: encoded_population.append(Analytic.encode_path(path, pathnet_width))
 
         average_encoded = []
 
         for i in range(len(encoded_population[0])):
-            running_total = np.zeros(L)
+            running_total = np.zeros(pathnet_width)
             for path in encoded_population:
                 running_total+=path[i]
             running_total = running_total / len(population)
@@ -196,6 +208,30 @@ class Analytic:
 
         return avg_dist
 
+    @staticmethod
+    def euclidean_centroid_diversity(population, pathnet_width):
+        encoded_population = []
+        for path in population: encoded_population.append(Analytic.encode_path(path, pathnet_width))
+
+        centroid = []
+
+        for i in range(len(encoded_population[0])):
+            running_total = np.zeros(pathnet_width)
+            for path in encoded_population:
+                running_total+=path[i]
+            running_total = running_total / len(population)
+            centroid.append(running_total)
+
+        avg_dist = []
+
+        for i in range(len(centroid)):
+            dist = 0
+            for ind in encoded_population:
+                dist += np.linalg.norm(ind[i]-centroid[i])
+            dist /= len(population)
+            avg_dist.append(dist)
+
+        return avg_dist
 
 if __name__ == "__main__":
     print('why run this file?')
