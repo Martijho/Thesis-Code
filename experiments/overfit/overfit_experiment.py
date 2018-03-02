@@ -55,13 +55,169 @@ def create_empty_log():
             }
     return log_
 
+
+class ExperimentationThread(threading.Thread):
+    def __init__(self, MNIST, cSVHN, param):
+        threading.Thread.__init__(self)
+        self.x1, self.y1, self.x1_test, self.y1_test = MNIST
+        self.x2, self.y2, self.x2_test, self.y2_test = cSVHN
+
+        self.param = param
+
+        self.log = {}
+        self.log['hyperparameter'] = param
+        self.log['set_size'] = len(self.x2)
+
+        self.PN_E = -1
+        self.PN_mnist = -1
+        self.PN_P = -1
+
+        self.pn_denovo_done = False
+        self.pn_pretrained_done = False
+        self.static_done = False
+        self.static_transfer_done = False
+
+    def run(self):
+        K.set_session(tf.Session(config=tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=4))))
+
+        param = self.param
+
+        self.pn_denovo(param)
+        self.pn_pretrained(param)
+        self.static()
+        self.static_transfer()
+
+
+        self.log['PN_E'] = self.PN_E
+        self.log['PN_mnist'] = self.PN_mnist
+        self.log['PN_P'] = self.PN_P
+
+    def pn_denovo(self, param):
+        pn, task = PathNet.overfit_experiment()
+        ps = PathSearch(pn)
+        param['name'] =  'Task 1: cSVHN'
+
+        path, fitness, search_log = ps.dynamic_tournamet_search(self.x2, self.y2, task, hyperparam=param)
+
+        self.log['pathnet_denovo_path'] = path
+        self.log['pathnet_denovo_fitness'] = fitness
+        self.log['pathnet_denovo_size'] = pn.path2model(path, task).count_params()
+        self.log['pathnet_denovo_log'] = search_log
+        self.log['pathnet_denovo_training'] = copy.deepcopy(pn.training_counter)
+        self.log['pathnet_denovo_eval'] = pn.evaluate_path(self.x2_test, self.y2_test, path=path, task=task)
+
+        _, self.PN_E = Analytic.training_along_path(path, pn.training_counter)
+        print('de Novo pathnet:', path, self.log['pathnet_denovo_eval'])
+        self.pn_denovo_done = True
+
+    def pn_pretrained(self, param):
+        pn, task1 = PathNet.overfit_experiment()
+        ps = PathSearch(pn)
+
+        param['name'] = 'Task 1: MNIST'
+
+        mnist_path, mnist_training_fitness, mnist_log = ps.dynamic_tournamet_search(self.x1, self.y1, task1, hyperparam=param)
+        pn.save_new_optimal_path(mnist_path, task1)
+        _, self.PN_Pmnist = Analytic.training_along_path(mnist_path, pn.training_counter)
+
+        task2 = pn.create_new_task(like_this=task1)
+        param['name'] = 'Task 2: cSVHN'
+        cSVHN_path, cSVHN_training_fitness, cSVHN_log = ps.dynamic_tournamet_search(self.x2, self.y2, task2, hyperparam=param)
+
+        self.log['pathnet_path'] = cSVHN_path
+        self.log['pathnet_path_MNIST'] = mnist_path
+
+        self.log['pathnet_fitness'] = cSVHN_training_fitness
+        self.log['pathnet_fitness_MNIST'] = mnist_training_fitness
+
+        self.log['pathnet_size'] = pn.path2model(cSVHN_path, task2).count_params()
+        self.log['pathnet_size_MNIST'] = pn.path2model(mnist_path, task1).count_params()
+
+        self.log['pathnet_log'] = cSVHN_log
+        self.log['pathnet_log_MNIST'] = mnist_log
+
+        self.log['pathnet_training'] = copy.deepcopy(pn.training_counter)
+
+        self.log['pathnet_eval'] = pn.evaluate_path(self.x2_test, self.y2_test, path=cSVHN_path, task=task2)
+        self.log['pathnet_eval_MNIST'] = pn.evaluate_path(self.x2_test, self.y2_test, path=mnist_path, task=task1)
+
+        self.log['pathnet_reuse'] = Analytic.path_overlap(mnist_path, cSVHN_path)
+        _, self.PN_P = Analytic.training_along_path(cSVHN_path, pn.training_counter)
+
+        print('MNIST:', mnist_path, self.log['pathnet_eval_MNIST'])
+        print('cSVHN:', cSVHN_path, self.log['pathnet_eval'])
+        print('overlap:', Analytic.path_overlap(mnist_path, cSVHN_path))
+
+        self.pn_pretrained_done = True
+
+    def static(self):
+        print()
+        print('Training static ML model...')
+        pn, task = PathNet.overfit_experiment()
+        model = pn.path2model(self.log['pathnet_denovo_path'], task)
+        static_ML_training_acc = []
+
+        for i in range(int(round(self.PN_E)) * 50):
+            batch = np.random.randint(0, len(self.x2), 16)
+            hist = model.train_on_batch(self.x2[batch], self.y2[batch])
+            static_ML_training_acc.append(hist[1])
+
+        fit = model.evaluate(self.x2_test, self.y2_test, batch_size=16, verbose=True)[1]
+        self.log['static_training_fitness'] = static_ML_training_acc
+        self.log['static_evaluation_fitness'] = fit
+        self.log['static_size'] = model.count_params()
+        print()
+        print('Static ML:', '50*' + str(self.PN_E), 'iterations. Reached', fit)
+
+        self.static_done = True
+
+    def static_transfer(self):
+        print()
+        print('Training static ML with transfer learning and fine tuning')
+        pn, task1 = PathNet.overfit_experiment()
+        model = pn.path2model(self.log['pathnet_path'], task1)
+        ML_MNIST_training_acc = []
+        ML_cSVHN_training_acc = []
+
+        for i in range(int(round(self.PN_Pmnist)) * 50):
+            batch = np.random.randint(0, len(self.x1), 16)
+            hist = model.train_on_batch(self.x1[batch], self.y1[batch])
+            ML_MNIST_training_acc.append(hist[1])
+
+        fit1 = model.evaluate(self.x1_test, self.y1_test, batch_size=16, verbose=True)[1]
+        print()
+        print('Transfer learning MNIST:', '50*' + str(self.PN_Pmnist), 'iterations. Reached', fit1)
+
+        for i in range(int(round(self.PN_P)) * 50):
+            batch = np.random.randint(0, len(self.x2), 16)
+            hist = model.train_on_batch(self.x2[batch], self.y2[batch])
+            ML_cSVHN_training_acc.append(hist[1])
+
+        fit2 = model.evaluate(self.x2_test, self.y2_test, batch_size=16, verbose=True)[1]
+        print()
+        print('Transfer learning cSVHN:', '50*' + str(self.PN_P), 'iterations. Reached', fit2)
+
+        self.log['static_transfer_training_fitness_MNIST'] = ML_MNIST_training_acc
+        self.log['static_transfer_evaluation_fitness_MNIST'] = fit1
+        self.log['static_transfer_training_fitness_cSVHN'] = ML_cSVHN_training_acc
+        self.log['static_transfer_evaluation_fitness_cSVHN'] = fit2
+        self.log['static_transfer_size'] = model.count_params()
+
+        self.static_transfer_done = True
+
+    def all_done(self):
+        if self.pn_denovo_done and self.pn_pretrained_done and self.static_done and self.static_transfer_done:
+            return True
+        return False
+
+
 data = DataPrep()
 data.mnist()
 data.add_padding()
 data.grayscale2rgb()
-x1, y1, x1_test, y1_test = data.x, data.y, data.x_test, data.y_test
+mnist = data.x, data.y, data.x_test, data.y_test
 
-
+'''
 K.set_session(tf.Session(config=tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=4))))
 t = time.time()
 for limit in [40000, 20000, 10000, 5000, 1000]:
@@ -73,7 +229,7 @@ for limit in [40000, 20000, 10000, 5000, 1000]:
     print()
 
     #x1_test, y1_test = x1_test[:100], y1_test[:100]
-    log = create_empty_log()
+    log = {}#create_empty_log()
 
     # De Novo PathNet
     pn, task1 = PathNet.overfit_experiment()
@@ -166,15 +322,40 @@ for limit in [40000, 20000, 10000, 5000, 1000]:
     log['static_transfer_training_fitness_MNIST'] = ML_MNIST_training_acc
     log['static_transfer_evaluation_fitness_MNIST'] = fit1
     log['static_transfer_size_MNIST'] = model.count_params()
-    log['static_transfer_training_fitness_MNIST'] = ML_cSVHN_training_acc
-    log['static_transfer_evaluation_fitness_MNIST'] = fit2
+    log['static_transfer_training_fitness_cSVHN'] = ML_cSVHN_training_acc
+    log['static_transfer_evaluation_fitness_cSVHN'] = fit2
     log['static_transfer_size_MNIST'] = model.count_params()
     log['set_size'] = limit
 
     log['PN_E'] = PN_E
     log['PN_Pmnist'] = PN_Pmnist
     log['PN_P'] = PN_P
+'''
+t = time.time()
+for limit in [50000, 10000, 5000, 2000, 1000, 500, 100]:
 
+    cSVHN = get_data(limit, 100)#000)
+    param = { 'threshold_acc': 1.1,
+              'generation_limit': 1,
+              'population_size': 2,
+              'selection_pressure': [2],
+              'replace_func': [TS_box.winner_replace_all],
+              'flipped': False}
+
+    print()
+    print('========== ********* =========== Training size:', limit, '========== ********* ===========')
+    print('cSVHN  Training:', cSVHN[0].shape, 'Validation:', cSVHN[2].shape)
+    print('MNIST  Training:', mnist[0].shape, 'Validation:', mnist[2].shape)
+    print()
+
+    thread = ExperimentationThread(mnist, cSVHN, param)
+
+    thread.start()
+    thread.join()
+
+    assert thread.all_done(), 'ERROR: experimental thread not completed'
+
+    log = thread.log
     try:
         with open('../../../logs/overfit/log'+str(limit)+'.pkl', 'rb') as file:
             log_list = pkl.load(file)

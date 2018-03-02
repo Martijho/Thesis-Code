@@ -60,9 +60,9 @@ for k, v in log.items():
 
 p = Exp2_plotter(experiments)
 
-p.plot_average_population_diversity(save_file='plots/Average_population_diversity_euclidean_centroid',
-                                    diversity_metric=Analytic.euclidean_centroid_diversity, lock=False)
-
+p.plot_average_population_diversity(save_file='plots/Average_population_diversity_homemade',
+                                    diversity_metric=Analytic.homemade_diversity, lock=False)
+input()
 p.boxplot_used_training_ratio(save_file='plots/Used_training_ratio', lock=False)
 #for k, v in experiments.items():
 #    p.plot_population_diversity(v, k, save_file='plots/Population_diversity_'+k, lock=False)

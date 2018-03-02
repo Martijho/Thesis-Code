@@ -3,7 +3,7 @@ import matplotlib.patches as mpatches
 from analytic import Analytic
 import numpy as np
 import time
-
+import matplotlib.lines as mlines
 # First path experiments + Flipped Search+Search
 class Exp1_plotter:
     def __init__(self, log, width, depth):
@@ -958,6 +958,63 @@ class Exp2_plotter:
         ax.legend(list(self.logs.keys()), bbox_to_anchor=(1.05, 0),loc='lower left', borderaxespad=0.)
 
         plt.suptitle('Population Diversity('+diversity_metric.__name__+')')
+
+        fig = plt.gcf()
+        fig.set_size_inches(18.5, 10.5)
+
+        if save_file is not None:
+            plt.savefig(save_file + '.png')
+        plt.show(block=lock)
+
+# Overfit experiments
+class Exp3_plotter:
+    def __init__(self, logs):
+        self.logs = logs
+        self.colors = ['#dd2020', '#e8bd00', '#7b6500', '#0fcf71', '#409edb', '#e55d82']
+
+    def plot_validation_accuracy(self, save_file=None, lock=True):
+
+        plt.figure('Validation accuracy')
+
+        denovo_pn_x, denovo_pn_y = [], []
+        pn_x, pn_y = [], []
+        static_x, static_y = [], []
+        transfer_x, transfer_y = [], []
+
+        for k, v in self.logs.items():
+            for log in v:
+                plt.scatter(log['set_size'], log['pathnet_denovo_eval'], alpha=0.4, color=self.colors[0])
+                plt.scatter(log['set_size'], log['pathnet_eval'],  alpha=0.4, color=self.colors[1])
+                plt.scatter(log['set_size'], log['static_evaluation_fitness'], alpha=0.4, color=self.colors[2])
+                plt.scatter(log['set_size'], log['static_transfer_evaluation_fitness_cSVHN'], alpha=0.4, color=self.colors[3])
+
+                plt.scatter(log['set_size'], log['pathnet_denovo_fitness'], marker='x', color=self.colors[0])
+                plt.scatter(log['set_size'], log['pathnet_fitness'],  marker='x', color=self.colors[1])
+
+                y = log['static_training_fitness'][-5:]
+                #plt.scatter(log['set_size'], sum(y)/len(y), marker='x', color=self.colors[2])
+
+                y = log['static_transfer_training_fitness_cSVHN'][-5:]
+                print(log['static_transfer_training_fitness_cSVHN'])
+                #plt.scatter(log['set_size'], sum(y)/len(y), marker='x', color=self.colors[3])
+
+        denovo =    mpatches.Patch(color=self.colors[0],  label='PathNet de novo')
+        pn =        mpatches.Patch(color=self.colors[1],  label='Pretrained PathNet')
+        static =    mpatches.Patch(color=self.colors[2],  label='Static ML model')
+        transfer =  mpatches.Patch(color=self.colors[3],  label='Pretrained ML with fine tuning')
+
+        # Create a legend for the first line.
+        #first_legend = plt.legend(handles=[denovo, pn, static, transfer], loc=4)
+        #ax = plt.gca().add_artist(first_legend)
+
+        vali = plt.scatter([], [], color='grey', marker='x', label='Validation')
+        trai = plt.scatter([], [], color='grey', marker='o', alpha=0.4, label='Training')
+        #plt.legend(handles=[vali, trai], loc=3)
+        plt.legend(handles=[denovo, pn, static, transfer, vali, trai])
+        plt.title('Validation accuracy')
+        plt.xlabel('Training data size')
+        plt.ylabel('Validation accuracy')
+
 
         fig = plt.gcf()
         fig.set_size_inches(18.5, 10.5)

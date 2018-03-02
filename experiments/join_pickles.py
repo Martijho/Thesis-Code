@@ -20,8 +20,11 @@ dir = '../../logs/search/'
 #p27 = 'log_from_2.7.pkl'
 
 
-log_names = ['log_h.pkl', 'log_h2l.pkl', 'log_h2l_2.pkl', 'log_h_2.pkl', 'log_h_3.pkl',
-             'log_l.pkl', 'log_l2h.pkl', 'log_l2h_2.pkl', 'log_recomb.pkl']
+log_names = ['log_h.pkl', 'log_h_2.pkl','log_h_3.pkl',
+             'log_l.pkl', 'log_l_3.pkl',
+             'log_l2h.pkl', 'log_l2h_2.pkl',
+             'log_h2l.pkl', 'log_h2l_2.pkl',
+             'log_recomb.pkl', 'log_recomb_2.pkl']
 
 logs = {}
 for log_name in log_names:
